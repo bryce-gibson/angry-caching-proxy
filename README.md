@@ -17,4 +17,4 @@ To use the container for caching Docker container traffic, it can be run as foll
 
 It only really supports http requests at this point (no https) - so the iptables rule forwards traffic on port 80 to the Angry Caching Proxy container.
 
-It's also possible to add caching for http connections for the Docker daemon (eg ADDs in a Dockerfile) by setting the http_proxy environment variable before starting it (eg `http_proxy=http://localhost:8080 docker -d`).
+It's also possible to add caching for http connections for the Docker daemon (eg ADDs in a Dockerfile) by setting the http_proxy environment variable before starting it (eg `http_proxy=http://localhost:8080 docker -d`), although this seems to break https connections (including `docker pull`-ing) because docker appears to use the http_proxy variable for https connections as well (and Angry Caching Proxy doesn't support ssl).
