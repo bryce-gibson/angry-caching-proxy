@@ -11,7 +11,8 @@ var config = {
         "apt-get",
         "npm",
         "pypi",
-        "rubygems"
+        "rubygems",
+        "all"
     ]
 };
 

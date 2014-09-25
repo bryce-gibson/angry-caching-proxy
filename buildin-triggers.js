@@ -53,6 +53,9 @@ module.exports = {
         var egg = /^.*packages\/source\/.*(\.tar\.gz|\.zip)$/;
         return egg.test(req.url);
 
+    },
+    "all": function isNotLocalhost(req, res) {
+        return !req.headers.host.match(new RegExp('localhost', 'i'))
     }
 
 };

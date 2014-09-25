@@ -11,6 +11,7 @@ var path = require("path");
 
 var stat = Q.denodeify(fs.stat);
 var writeFile = Q.denodeify(fs.writeFile);
+var readFile = Q.denodeify(fs.readFile);
 var rename = Q.denodeify(fs.rename);
 
 function promiseFromStream(stream) {
@@ -33,10 +34,11 @@ function toCacheKey(req) {
 module.exports = function(triggerFns, cacheDir) {
 
     function toCachePath(req) {
-        return path.join(cacheDir, toCacheKey(req));
+        return path.join(cacheDir, toCacheKey(req) + '-' + req.method);
     }
 
     function writeMeta(origReq, clientRes) {
+        console.log('Writing ' +  toCachePath(origReq) + '.json')
         return writeFile(
             toCachePath(origReq) + ".json",
             JSON.stringify({
@@ -45,11 +47,11 @@ module.exports = function(triggerFns, cacheDir) {
                 url: origReq.url,
                 created: new Date(),
                 responseHeaders: clientRes.headers,
-                requestHeaders: origReq.headers
+                requestHeaders: origReq.headers,
+                statusCode: clientRes.statusCode
             }, null, "    ")
       );
     }
-
     function createCache(req, res) {
         console.log("Cache miss", req.method, req.url);
         res.setHeader("X-Cache", "Miss " + toCacheKey(req));
@@ -64,22 +66,17 @@ module.exports = function(triggerFns, cacheDir) {
             clientRequest.on("error", reject);
             clientRequest.on("response", function(clientRes) {
 
-                // Write cache only on 200 success
-                if (clientRes.statusCode === 200) {
-                    var file = filed(tempTarget);
+                var file = filed(tempTarget);
 
-                    resolve(Q.all([
-                        promiseFromStream(res),
-                        writeMeta(req, clientRes),
-                        promiseFromStream(file).then(function() {
-                            return rename(tempTarget, target);
-                        })
-                    ]));
+                resolve(Q.all([
+                    promiseFromStream(res),
+                    writeMeta(req, clientRes),
+                    promiseFromStream(file).then(function() {
+                        return rename(tempTarget, target);
+                    })
+                ]));
 
-                    clientRequest.pipe(file);
-                } else {
-                    resolve(promiseFromStream(res));
-                }
+                clientRequest.pipe(file);
 
                 // But always proxy the response to the client
                 clientRequest.pipe(res);
@@ -105,14 +102,23 @@ module.exports = function(triggerFns, cacheDir) {
         res.setHeader("X-Cache", "Hit " + toCacheKey(req));
 
 
-        res.sendfile(toCachePath(req));
+        if(req.method == 'GET') {
+            res.sendfile(toCachePath(req));
+        } else if(req.method == 'HEAD') {
+            readFile(toCachePath(req) + '.json').then(function(data) {
+                res.setTimeout(1); // Me hacking because the connection seems to not close correctly some times -> I'm not certain this works/helps
+                var json = JSON.parse(data)
+                res.writeHead(json.statusCode, json.responseHeaders)
+                res.end()
+            })
+        }
         return promiseFromStream(res);
     }
 
 
     function cacheResponse(req, res) {
 
-        return stat(toCachePath(req)).then(function(info) {
+        return stat( req.method == 'HEAD' ? (toCachePath(req) + '.json') : toCachePath(req) ).then(function(info) {
             return respondFromCache(req, res);
         }, function(err) {
             return createCache(req, res);
@@ -124,7 +130,12 @@ module.exports = function(triggerFns, cacheDir) {
     return function angryCachingProxy(req, res, next) {
 
         var u = url.parse(req.url);
-        if (!u.host) {
+        if(!u.host) {
+            req.url = 'http://'+req.headers.host+req.url
+            u = url.parse(req.url)
+        }
+        if ( !u.host ) {
+            console.log('host not found ' + require('util').inspect(req))
             return next();
         }
 
@@ -136,7 +147,7 @@ module.exports = function(triggerFns, cacheDir) {
             return next(new Error(msg));
         }
 
-        if (req.method === "GET") {
+        if (req.method === "GET" || req.method == "HEAD") {
             var useCache = triggerFns.some(function(trigger) {
                 return trigger(req, res);
             });
