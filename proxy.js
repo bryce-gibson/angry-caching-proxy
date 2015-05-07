@@ -25,7 +25,7 @@ function promiseFromStream(stream) {
 
 function toCacheKey(req) {
     var h = crypto.createHash("sha1");
-    h.update(req.url);
+    h.update([ req.url, req.headers['range'], req.headers['accept'], req.headers['user-agent'] ].join('|'));
     return h.digest("hex");
 }
 
