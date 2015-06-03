@@ -3,4 +3,4 @@ MAINTAINER Bryce Gibson "bryce.gibson@unico.com.au"
 
 VOLUME /cache
 
-CMD ./bin/angry-caching-proxy --directory /cache
+ENTRYPOINT [ "./bin/angry-caching-proxy" , "--directory", "/cache" ]
